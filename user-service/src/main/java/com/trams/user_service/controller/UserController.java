@@ -66,8 +66,12 @@ public class UserController {
             log.info("Published UserCreatedEvent [id: {}] to stream [{}] seq [{}]",
                     eventId, ack.getStream(), ack.getSeqno());
         } catch (Exception e) {
-            log.error("Failed to publish event to NATS broker: {}", e.getMessage());
-            // User record is saved; we will document this dual-write scenario in the README
+            log.error("Failed to publish event to NATS broker: {}", e.getMessage(), e);
+
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of(
+                            "error", "User was created, but the registration event could not be published"
+                    ));
         }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(savedUser);
