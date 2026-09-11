@@ -1,0 +1,104 @@
+services:
+  nats-server:
+    image: nats:2.10-alpine
+    container_name: nats-broker
+    command: ["-js", "-m", "8222", "--auth", "${NATS_AUTH_TOKEN:-super_secure_nats_token_2026}"]
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
+    networks:
+      - internal-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/varz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trams_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_pass}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: user-service
+    environment:
+      USER_SERVICE_PORT: 8081
+      DB_HOST: postgres-db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-trams_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_pass}
+      NATS_URL: nats://nats-broker:4222
+      NATS_AUTH_TOKEN: ${NATS_AUTH_TOKEN:-super_secure_nats_token_2026}
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats-server:
+        condition: service_healthy
+    networks:
+      - internal-net
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification-service
+    environment:
+      NOTIFICATION_SERVICE_PORT: 8082
+      DB_HOST: postgres-db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-trams_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_pass}
+      NATS_URL: nats://nats-broker:4222
+      NATS_AUTH_TOKEN: ${NATS_AUTH_TOKEN:-super_secure_nats_token_2026}
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats-server:
+        condition: service_healthy
+    networks:
+      - internal-net
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    environment:
+      GATEWAY_PORT: 8080
+      USER_SERVICE_URL: http://user-service:8081
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+    networks:
+      - internal-net
+
+networks:
+  internal-net:
+    driver: bridge
+
+volumes:
+  pgdata:
