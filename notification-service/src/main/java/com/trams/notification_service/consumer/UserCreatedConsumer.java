@@ -1,5 +1,6 @@
 package com.trams.notification_service.consumer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.trams.common.dto.UserCreatedEvent;
 import com.trams.notification_service.model.ProcessedEvent;
@@ -22,7 +23,7 @@ public class UserCreatedConsumer {
 
     private final Connection natsConnection;
     private final ProcessedEventRepository processedEventRepository;
-    private final ObjectMapper objectMapper; // Injected by Spring with JavaTimeModule registered
+    private final ObjectMapper objectMapper;
 
     private static final String STREAM_NAME = "USERS_STREAM";
     private static final String SUBJECT = "user.events.created";
@@ -62,18 +63,26 @@ public class UserCreatedConsumer {
             Dispatcher dispatcher = natsConnection.createDispatcher();
 
             js.subscribe(SUBJECT, dispatcher, (Message msg) -> {
-                try {
-                    String json = new String(msg.getData(), StandardCharsets.UTF_8);
-                    UserCreatedEvent event = objectMapper.readValue(json, UserCreatedEvent.class);
+                String json = new String(msg.getData(), StandardCharsets.UTF_8);
+                UserCreatedEvent event;
 
-                    // Idempotency check against PostgreSQL
+                // 1. Poison-pill protection: discard unparseable payloads immediately
+                try {
+                    event = objectMapper.readValue(json, UserCreatedEvent.class);
+                } catch (JsonProcessingException e) {
+                    log.error("[POISON PILL] Failed to deserialize JSON. Discarding unrecoverable message: {}", json, e);
+                    msg.ack();
+                    return;
+                }
+
+                // 2. Business logic & idempotency barrier
+                try {
                     if (processedEventRepository.existsById(event.eventId())) {
                         log.warn("[DUPLICATE DETECTED] Event [{}] already processed. Discarding.", event.eventId());
                         msg.ack();
                         return;
                     }
 
-                    // Dispatch notification
                     log.info("------------------------------------------------------------");
                     log.info("DISPATCHING NOTIFICATION:");
                     log.info("  Recipient : {} <{}>", event.fullName(), event.email());
@@ -82,15 +91,13 @@ public class UserCreatedConsumer {
                     log.info("  Event ID  : {}", event.eventId());
                     log.info("------------------------------------------------------------");
 
-                    // Commit to idempotency table
-                    // Commit to idempotency table
                     processedEventRepository.save(new ProcessedEvent(event.eventId(), "USER_CREATED"));
 
                     msg.ack();
                     log.info("[ACKNOWLEDGED] Event [{}] committed successfully", event.eventId());
 
                 } catch (Exception e) {
-                    log.error("Failed to process event. NAK-ing for redelivery: {}", e.getMessage());
+                    log.error("Transient error processing event [{}]. NAK-ing for redelivery", event.eventId(), e);
                     msg.nak();
                 }
             }, false, options);
