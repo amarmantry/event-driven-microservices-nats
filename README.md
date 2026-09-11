@@ -1,7 +1,7 @@
 ```markdown
 # Resilient Event-Driven Microservices Platform
 
-A production-grade, fault-tolerant event-driven microservices ecosystem built with **Java 21**, **Spring Boot 4.x**, **NATS JetStream**, and **PostgreSQL**. Designed with persistent idempotency guarantees, dead-letter/poison-pill isolation, and edge reverse-proxy routing to fulfill all requirements for the Trams backend engineering evaluation.
+A production-oriented, fault-tolerant event-driven microservices ecosystem built with **Java 21**, **Spring Boot 4.x**, **NATS JetStream**, and **PostgreSQL**. Designed with persistent idempotency guarantees, dead-letter/poison-pill isolation, and edge reverse-proxy routing to fulfill all requirements for the Trams backend engineering evaluation.
 
 ---
 
