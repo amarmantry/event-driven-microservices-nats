@@ -1,0 +1,22 @@
+server:
+  port: ${NOTIFICATION_SERVICE_PORT:8082}
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:trams_db}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:0000}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+nats:
+  url: ${NATS_URL:nats://localhost:4222}
+  token: ${NATS_AUTH_TOKEN:super_secure_nats_token_2026}
+  stream-name: USERS_STREAM
+  subject: user.events.created
+  durable-consumer-name: notification-service-consumer
